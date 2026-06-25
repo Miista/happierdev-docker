@@ -40,10 +40,12 @@ jobs:
           CHANNELS="stable:server-stable:ui-web-stable preview:server-preview:ui-web-preview dev:server-dev:ui-web-dev"
           owner="${OWNER,,}"
 
-          resolve_ver() { # <release-tag> <product> -> version
-            gh release view "$1" --repo happier-dev/happier --json assets \
-              --jq "[.assets[].name | select(test(\"$2\"))][0]" \
-            | sed -E "s/^happier-$3-v(.+)-$4\$/\\1/"
+          resolve_ver() { # <release-tag> <product> <suffix> -> version
+            local asset
+            asset=$(gh release view "$1" --repo happier-dev/happier --json assets \
+              --jq "[.assets[].name | select(endswith(\"$3\"))][0]")
+            asset="${asset#happier-$2-v}"   # strip prefix
+            printf '%s' "${asset%$3}"       # strip suffix
           }
 
           INCLUDE='[]'
@@ -53,8 +55,8 @@ jobs:
             stag="${rest%%:*}"
             utag="${rest#*:}"
 
-            sver=$(resolve_ver "$stag" '-linux-x64\.tar\.gz$' server 'linux-x64\.tar\.gz')
-            uver=$(resolve_ver "$utag" 'web-any\.tar\.gz$' ui-web 'web-any\.tar\.gz')
+            sver=$(resolve_ver "$stag" server -linux-x64.tar.gz)
+            uver=$(resolve_ver "$utag" ui-web -web-any.tar.gz)
 
             # On schedule, skip channels whose version image already exists.
             # On push / manual dispatch, always rebuild (Dockerfile may have changed).
