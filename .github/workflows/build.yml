@@ -120,6 +120,43 @@ jobs:
           echo "ui=${ui#,}"       >> "$GITHUB_OUTPUT"
           echo "relay=${relay#,}" >> "$GITHUB_OUTPUT"
 
+      # Gate: build a local amd64 image and confirm a fresh DB gets a schema.
+      # If a channel's binary neither self-migrates nor is bootstrapped by our
+      # entrypoint, this fails the channel and nothing is published for it.
+      - name: Build test image (amd64, local)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: happier-test:${{ matrix.channel }}
+          cache-from: type=gha,scope=${{ matrix.channel }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
+          build-args: |
+            SERVER_TAG=${{ matrix.upstream_tag }}
+            SERVER_VERSION=${{ matrix.version }}
+            UI_WEB_TAG=${{ matrix.ui_web_tag }}
+            UI_WEB_VERSION=${{ matrix.ui_web_version }}
+
+      - name: Smoke test — schema is created on a fresh database
+        run: |
+          set -eu
+          data=$(mktemp -d)
+          docker run -d --name st -e HANDY_MASTER_SECRET=test -v "$data":/data \
+            happier-test:${{ matrix.channel }} >/dev/null
+          sleep 10
+          tables=$(docker run --rm -v "$data":/data alpine sh -c \
+            'apk add -q sqlite 2>/dev/null; sqlite3 /data/happier-server-light.sqlite ".tables" 2>/dev/null | tr " " "\n" | grep -c .' || echo 0)
+          echo "tables created: ${tables}"
+          docker logs st 2>&1 | grep -iE '\[entrypoint\]|does not exist' | head -5 || true
+          docker rm -f st >/dev/null 2>&1 || true
+          rm -rf "$data"
+          if [ "${tables:-0}" -lt 10 ]; then
+            echo "::error::channel ${{ matrix.channel }} produced no schema (${tables} tables) — not publishing"
+            exit 1
+          fi
+
       - name: Build and push — happier-ui
         uses: docker/build-push-action@v6
         with:

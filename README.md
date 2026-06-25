@@ -37,7 +37,11 @@ A full run produces **6 images** (2 variants × 3 channels), each a multi-arch m
 
 The comma-separated entries are **separate tags on the same image**, not combined — e.g. the preview `happier-ui` is published as both `happier-ui:preview` and `happier-ui:0.2.2-preview.1775585938.1`. Use a floating tag (`preview`) to track a channel, or a `<version>` tag to pin exactly.
 
-On the daily schedule, a channel is skipped if its `<version>` is already published, so unchanged channels aren't rebuilt.
+On the daily schedule, a channel is skipped if its `<version>` is already published, so unchanged channels aren't rebuilt. Each built image is also smoke-tested — booted against a fresh database to confirm the schema is created — and is only published if that passes.
+
+### Schema migrations
+
+Recent Happier server binaries apply their bundled Prisma migrations on startup. Older pinned builds (e.g. stable `0.2.0`) don't — they expected the source image's `run-server.sh` to run `prisma migrate deploy`, which isn't part of the standalone binary. These images include a small entrypoint that back-fills that step: on an unmigrated database it applies the bundled `migration.sql` files and records them in `_prisma_migrations` exactly as Prisma would. On an already-migrated database (including one a self-migrating binary handles itself) it's a no-op, so it's safe across all channels and retires itself once upstream's binaries all self-migrate.
 
 ## Usage
 

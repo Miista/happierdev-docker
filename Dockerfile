@@ -30,15 +30,17 @@ RUN curl -fsSL "https://github.com/happier-dev/happier/releases/download/${UI_WE
     | tar -xz --strip-components=1 -C /srv/ui
 
 FROM debian:12-slim AS base
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates sqlite3 && rm -rf /var/lib/apt/lists/*
 COPY --from=fetch /srv/server /srv/server
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENV PORT=3005
 ENV HAPPIER_SERVER_FLAVOR=light
 ENV HAPPIER_DB_PROVIDER=sqlite
 ENV HAPPIER_SERVER_LIGHT_DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 3005
-ENTRYPOINT ["/srv/server/happier-server"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 FROM base AS server
 
