@@ -8,10 +8,22 @@ The [official image](https://hub.docker.com/r/happierdev/relay-server) is built 
 
 | Image | Description | Size |
 |-------|-------------|------|
-| `ghcr.io/miista/happier-ui:latest` | Relay server + embedded web UI | ~263 MB |
-| `ghcr.io/miista/happier-relay:latest` | Relay server only | ~173 MB |
+| `ghcr.io/miista/happier-ui` | Relay server + embedded web UI | ~263 MB |
+| `ghcr.io/miista/happier-relay` | Relay server only | ~173 MB |
 
 Use `happier-relay` if you connect exclusively via the native desktop or mobile app. Use `happier-ui` if you want the web UI available at the server URL.
+
+## Channels
+
+Both images mirror Happier's three upstream release channels:
+
+| Tag | Upstream channel | Notes |
+|-----|------------------|-------|
+| `latest`, `stable` | `server-stable` | Stable releases. Recommended. |
+| `preview` | `server-preview` | Happier's dev channel — periodic, fairly tested. |
+| `dev` | `server-dev` | Bleeding edge — updated on every upstream push. |
+
+Each build is also published under its immutable version tag (e.g. `:0.2.0`, `:0.2.10-dev.4`). Pin to a version tag for reproducible deployments.
 
 ## Usage
 

@@ -15,42 +15,69 @@ env:
 jobs:
   detect:
     runs-on: ubuntu-latest
+    permissions:
+      packages: read
     outputs:
-      needs_build: ${{ steps.check.outputs.needs_build }}
-      server_tag: ${{ steps.check.outputs.server_tag }}
-      server_version: ${{ steps.check.outputs.server_version }}
+      matrix: ${{ steps.check.outputs.matrix }}
+      any: ${{ steps.check.outputs.any }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check for new upstream release
+      - name: Resolve channels and decide what to build
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
         run: |
-          SERVER_TAG=$(gh release list --repo happier-dev/happier --limit 50 \
-            | awk -F'\t' '/^Happier Server / { print $3; exit }')
+          set -euo pipefail
 
-          CURRENT=$(cat .version 2>/dev/null || echo "")
+          # Upstream floating channel tags -> our channel name
+          CHANNELS="stable:server-stable preview:server-preview dev:server-dev"
 
-          echo "server_tag=$SERVER_TAG"                 >> "$GITHUB_OUTPUT"
-          echo "server_version=${SERVER_TAG#server-v}" >> "$GITHUB_OUTPUT"
+          INCLUDE='[]'
+          for pair in $CHANNELS; do
+            ch="${pair%%:*}"
+            tag="${pair#*:}"
 
-          echo "Current: $CURRENT"
-          echo "Latest:  $SERVER_TAG"
+            asset=$(gh release view "$tag" --repo happier-dev/happier --json assets \
+              --jq '[.assets[].name | select(test("-linux-x64\\.tar\\.gz$"))][0]')
+            ver=$(printf '%s' "$asset" | sed -E 's/^happier-server-v(.+)-linux-x64\.tar\.gz$/\1/')
 
-          if [ "$SERVER_TAG" != "$CURRENT" ] || [ "${{ github.event_name }}" = "push" ]; then
-            echo "needs_build=true" >> "$GITHUB_OUTPUT"
+            # On schedule, skip channels whose version image already exists.
+            # On push / manual dispatch, always rebuild (Dockerfile may have changed).
+            if [ "$EVENT" = "schedule" ] && \
+               docker manifest inspect "$REGISTRY/$OWNER/happier-ui:$ver" >/dev/null 2>&1; then
+              echo "skip $ch ($ver) — already published"
+              continue
+            fi
+
+            echo "build $ch ($ver)"
+            INCLUDE=$(printf '%s' "$INCLUDE" | jq -c \
+              --arg ch "$ch" --arg tag "$tag" --arg ver "$ver" \
+              '. + [{channel:$ch, upstream_tag:$tag, version:$ver}]')
+          done
+
+          echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
+          if [ "$INCLUDE" = '[]' ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
           else
-            echo "needs_build=false" >> "$GITHUB_OUTPUT"
+            echo "any=true" >> "$GITHUB_OUTPUT"
           fi
 
   build:
     needs: detect
-    if: needs.detect.outputs.needs_build == 'true'
+    if: needs.detect.outputs.any == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
       packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -63,56 +90,48 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v5
-        id: meta-ui
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/happier-ui
-          tags: |
-            type=raw,value=latest
-            type=raw,value=${{ needs.detect.outputs.server_version }}
+      - name: Compute image tags
+        id: tags
+        run: |
+          set -eu
+          case "${{ matrix.channel }}" in
+            stable)  floats="latest stable" ;;
+            preview) floats="preview" ;;
+            dev)     floats="dev" ;;
+          esac
 
-      - uses: docker/metadata-action@v5
-        id: meta-relay
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/happier-relay
-          tags: |
-            type=raw,value=latest
-            type=raw,value=${{ needs.detect.outputs.server_version }}
+          ui="" ; relay=""
+          for t in $floats "${{ matrix.version }}"; do
+            ui="$ui,$REGISTRY/$OWNER/happier-ui:$t"
+            relay="$relay,$REGISTRY/$OWNER/happier-relay:$t"
+          done
+          echo "ui=${ui#,}"       >> "$GITHUB_OUTPUT"
+          echo "relay=${relay#,}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push — with UI
+      - name: Build and push — happier-ui
         uses: docker/build-push-action@v6
         with:
           context: .
           target: server-ui
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta-ui.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.tags.outputs.ui }}
+          cache-from: type=gha,scope=${{ matrix.channel }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
           build-args: |
-            SERVER_TAG=${{ needs.detect.outputs.server_tag }}
-            SERVER_VERSION=${{ needs.detect.outputs.server_version }}
+            SERVER_TAG=${{ matrix.upstream_tag }}
+            SERVER_VERSION=${{ matrix.version }}
 
-      - name: Build and push — relay
+      - name: Build and push — happier-relay
         uses: docker/build-push-action@v6
         with:
           context: .
           target: server
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta-relay.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.tags.outputs.relay }}
+          cache-from: type=gha,scope=${{ matrix.channel }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
           build-args: |
-            SERVER_TAG=${{ needs.detect.outputs.server_tag }}
-            SERVER_VERSION=${{ needs.detect.outputs.server_version }}
-
-      - name: Commit updated .version
-        if: github.event_name != 'push'
-        run: |
-          echo "${{ needs.detect.outputs.server_tag }}" > .version
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .version
-          git commit -m "chore: update to ${{ needs.detect.outputs.server_version }}"
-          git push
+            SERVER_TAG=${{ matrix.upstream_tag }}
+            SERVER_VERSION=${{ matrix.version }}
