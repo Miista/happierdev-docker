@@ -38,6 +38,7 @@ jobs:
 
           # Upstream floating channel tags -> our channel name
           CHANNELS="stable:server-stable preview:server-preview dev:server-dev"
+          owner="${OWNER,,}"
 
           INCLUDE='[]'
           for pair in $CHANNELS; do
@@ -51,7 +52,7 @@ jobs:
             # On schedule, skip channels whose version image already exists.
             # On push / manual dispatch, always rebuild (Dockerfile may have changed).
             if [ "$EVENT" = "schedule" ] && \
-               docker manifest inspect "$REGISTRY/$OWNER/happier-ui:$ver" >/dev/null 2>&1; then
+               docker manifest inspect "$REGISTRY/$owner/happier-ui:$ver" >/dev/null 2>&1; then
               echo "skip $ch ($ver) — already published"
               continue
             fi
@@ -100,10 +101,11 @@ jobs:
             dev)     floats="dev" ;;
           esac
 
+          owner="${OWNER,,}"
           ui="" ; relay=""
           for t in $floats "${{ matrix.version }}"; do
-            ui="$ui,$REGISTRY/$OWNER/happier-ui:$t"
-            relay="$relay,$REGISTRY/$OWNER/happier-relay:$t"
+            ui="$ui,$REGISTRY/$owner/happier-ui:$t"
+            relay="$relay,$REGISTRY/$owner/happier-relay:$t"
           done
           echo "ui=${ui#,}"       >> "$GITHUB_OUTPUT"
           echo "relay=${relay#,}" >> "$GITHUB_OUTPUT"
