@@ -1,0 +1,81 @@
+name: Build and Push
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 4 * * *'  # daily at 04:00 UTC, picks up new upstream releases
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest upstream release versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SERVER_TAG=$(gh release list --repo happier-dev/happier --limit 50 \
+            | awk '/^Happier Server\t/ { print $NF; exit }')
+          SERVER_VERSION="${SERVER_TAG#server-v}"
+
+          UI_WEB_TAG=$(gh release list --repo happier-dev/happier --limit 50 \
+            | awk '/UI Web/ { print $NF; exit }')
+          UI_WEB_VERSION="${UI_WEB_TAG#ui-web-v}"
+
+          echo "server_tag=$SERVER_TAG"         >> "$GITHUB_OUTPUT"
+          echo "server_version=$SERVER_VERSION" >> "$GITHUB_OUTPUT"
+          echo "ui_web_tag=$UI_WEB_TAG"         >> "$GITHUB_OUTPUT"
+          echo "ui_web_version=$UI_WEB_VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Server:  $SERVER_TAG ($SERVER_VERSION)"
+          echo "UI Web:  $UI_WEB_TAG ($UI_WEB_VERSION)"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push — headless
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:headless
+            ghcr.io/${{ github.repository }}:${{ steps.versions.outputs.server_version }}-headless
+          build-args: |
+            SERVER_TAG=${{ steps.versions.outputs.server_tag }}
+            SERVER_VERSION=${{ steps.versions.outputs.server_version }}
+            UI_WEB_TAG=${{ steps.versions.outputs.ui_web_tag }}
+            UI_WEB_VERSION=${{ steps.versions.outputs.ui_web_version }}
+
+      - name: Build and push — with UI
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: server-ui
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ steps.versions.outputs.server_version }}
+          build-args: |
+            SERVER_TAG=${{ steps.versions.outputs.server_tag }}
+            SERVER_VERSION=${{ steps.versions.outputs.server_version }}
+            UI_WEB_TAG=${{ steps.versions.outputs.ui_web_tag }}
+            UI_WEB_VERSION=${{ steps.versions.outputs.ui_web_version }}
