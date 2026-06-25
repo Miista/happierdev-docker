@@ -6,19 +6,19 @@ The [official image](https://hub.docker.com/r/happierdev/relay-server) is built 
 
 ## Images
 
-| Tag | Description | Size |
-|-----|-------------|------|
-| `latest`, `<version>` | Relay server + embedded web UI | ~263 MB |
-| `headless`, `<version>-headless` | Relay server only | ~173 MB |
+| Image | Description | Size |
+|-------|-------------|------|
+| `ghcr.io/miista/happier-ui:latest` | Relay server + embedded web UI | ~263 MB |
+| `ghcr.io/miista/happier-relay:latest` | Relay server only | ~173 MB |
 
-Use `headless` if you connect exclusively via the native desktop or mobile app. Use `latest` if you want the web UI available at the server URL.
+Use `happier-relay` if you connect exclusively via the native desktop or mobile app. Use `happier-ui` if you want the web UI available at the server URL.
 
 ## Usage
 
 ```yaml
 services:
   happier:
-    image: ghcr.io/miista/happierdev-docker:latest
+    image: ghcr.io/miista/happier-ui:latest
     restart: unless-stopped
     environment:
       HANDY_MASTER_SECRET: your-secret-here   # generate with: openssl rand -hex 32

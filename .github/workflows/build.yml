@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  OWNER: ${{ github.repository_owner }}
 
 jobs:
   detect:
@@ -66,18 +66,18 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta-ui
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/happier-ui
           tags: |
             type=raw,value=latest
             type=raw,value=${{ needs.detect.outputs.server_version }}
 
       - uses: docker/metadata-action@v5
-        id: meta-headless
+        id: meta-relay
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/happier-relay
           tags: |
-            type=raw,value=headless
-            type=raw,value=${{ needs.detect.outputs.server_version }}-headless
+            type=raw,value=latest
+            type=raw,value=${{ needs.detect.outputs.server_version }}
 
       - name: Build and push — with UI
         uses: docker/build-push-action@v6
@@ -93,14 +93,14 @@ jobs:
             SERVER_TAG=${{ needs.detect.outputs.server_tag }}
             SERVER_VERSION=${{ needs.detect.outputs.server_version }}
 
-      - name: Build and push — headless
+      - name: Build and push — relay
         uses: docker/build-push-action@v6
         with:
           context: .
           target: server
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta-headless.outputs.tags }}
+          tags: ${{ steps.meta-relay.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
