@@ -25,6 +25,18 @@ Both images mirror Happier's three upstream release channels:
 
 Each build is also published under its immutable version tag (e.g. `:0.2.0`, `:0.2.10-dev.4`). Pin to a version tag for reproducible deployments.
 
+### Build matrix
+
+A full run produces **6 images** (2 variants × 3 channels), each a multi-arch manifest for `linux/amd64` and `linux/arm64`:
+
+| | `happier-ui` | `happier-relay` |
+|---|---|---|
+| **stable** | `latest`, `stable`, `<version>` | `latest`, `stable`, `<version>` |
+| **preview** | `preview`, `<version>` | `preview`, `<version>` |
+| **dev** | `dev`, `<version>` | `dev`, `<version>` |
+
+On the daily schedule, a channel is skipped if its `<version>` is already published, so unchanged channels aren't rebuilt.
+
 ## Usage
 
 ```yaml
