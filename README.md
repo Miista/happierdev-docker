@@ -35,6 +35,8 @@ A full run produces **6 images** (2 variants × 3 channels), each a multi-arch m
 | **preview** | `preview`, `<version>` | `preview`, `<version>` |
 | **dev** | `dev`, `<version>` | `dev`, `<version>` |
 
+The comma-separated entries are **separate tags on the same image**, not combined — e.g. the preview `happier-ui` is published as both `happier-ui:preview` and `happier-ui:0.2.2-preview.1775585938.1`. Use a floating tag (`preview`) to track a channel, or a `<version>` tag to pin exactly.
+
 On the daily schedule, a channel is skipped if its `<version>` is already published, so unchanged channels aren't rebuilt.
 
 ## Usage
