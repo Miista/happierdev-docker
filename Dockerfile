@@ -10,7 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN mkdir -p /srv/server /srv/ui && \
     ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x64") && \
     curl -fsSL "https://github.com/happier-dev/happier/releases/download/${SERVER_TAG}/happier-server-v${SERVER_VERSION}-linux-${ARCH}.tar.gz" \
-    | tar -xz --strip-components=1 --exclude='*/ui-web' -C /srv/server
+    | tar -xz --strip-components=1 --exclude='*/ui-web' -C /srv/server && \
+    rm -rf /srv/server/generated/mysql-client && \
+    find /srv/server/generated/sqlite-client -name '*.node' ! -name 'libquery_engine-debian-openssl-3.0.x.so.node' ! -name 'libquery_engine-linux-arm64-openssl-3.0.x.so.node' -delete && \
+    rm -rf /srv/server/node_modules/@img/sharp-libvips-linuxmusl-x64 \
+           /srv/server/node_modules/@img/sharp-linuxmusl-x64
 
 RUN curl -fsSL "https://github.com/happier-dev/happier/releases/download/${UI_WEB_TAG}/happier-ui-web-v${UI_WEB_VERSION}-web-any.tar.gz" \
     | tar -xz --strip-components=1 -C /srv/ui
