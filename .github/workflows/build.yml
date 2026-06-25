@@ -19,7 +19,6 @@ jobs:
       needs_build: ${{ steps.check.outputs.needs_build }}
       server_tag: ${{ steps.check.outputs.server_tag }}
       server_version: ${{ steps.check.outputs.server_version }}
-      platforms: ${{ steps.check.outputs.platforms }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,22 +32,11 @@ jobs:
 
           CURRENT=$(cat .version 2>/dev/null || echo "")
 
-          # Map upstream linux-<arch> tarball names to Docker platform strings
-          PLATFORMS=$(gh release view "$SERVER_TAG" --repo happier-dev/happier --json assets \
-            --jq '[.assets[].name |
-              select(startswith("happier-server-") and endswith(".tar.gz") and contains("-linux-")) |
-              capture("-linux-(?P<arch>[^.]+)\\.tar\\.gz").arch |
-              if   . == "x64"   then "linux/amd64"
-              elif . == "arm64" then "linux/arm64"
-              else empty end] | join(",")')
-
           echo "server_tag=$SERVER_TAG"                 >> "$GITHUB_OUTPUT"
           echo "server_version=${SERVER_TAG#server-v}" >> "$GITHUB_OUTPUT"
-          echo "platforms=$PLATFORMS"                  >> "$GITHUB_OUTPUT"
 
-          echo "Current:   $CURRENT"
-          echo "Latest:    $SERVER_TAG"
-          echo "Platforms: $PLATFORMS"
+          echo "Current: $CURRENT"
+          echo "Latest:  $SERVER_TAG"
 
           if [ "$SERVER_TAG" != "$CURRENT" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "needs_build=true" >> "$GITHUB_OUTPUT"
@@ -96,7 +84,7 @@ jobs:
         with:
           context: .
           target: server-ui
-          platforms: ${{ needs.detect.outputs.platforms }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta-ui.outputs.tags }}
           cache-from: type=gha
@@ -110,7 +98,7 @@ jobs:
         with:
           context: .
           target: server
-          platforms: ${{ needs.detect.outputs.platforms }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta-headless.outputs.tags }}
           cache-from: type=gha
