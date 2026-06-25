@@ -7,7 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 # Extract server tarball twice: with and without the bundled ui-web
 RUN mkdir -p /srv/server /srv/server-ui && \
-    ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x64") && \
+    ARCH=$(case "$TARGETARCH" in \
+        amd64)   echo "x64"   ;; \
+        arm64)   echo "arm64" ;; \
+        *) echo "ERROR: unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
+    esac) && \
     curl -fsSL "https://github.com/happier-dev/happier/releases/download/${SERVER_TAG}/happier-server-v${SERVER_VERSION}-linux-${ARCH}.tar.gz" \
     | tee /tmp/server.tar.gz \
     | tar -xz --strip-components=1 -C /srv/server-ui && \
