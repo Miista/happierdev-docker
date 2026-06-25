@@ -36,31 +36,39 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Upstream floating channel tags -> our channel name
-          CHANNELS="stable:server-stable preview:server-preview dev:server-dev"
+          # Channel -> (server tag, ui-web tag)
+          CHANNELS="stable:server-stable:ui-web-stable preview:server-preview:ui-web-preview dev:server-dev:ui-web-dev"
           owner="${OWNER,,}"
 
-          INCLUDE='[]'
-          for pair in $CHANNELS; do
-            ch="${pair%%:*}"
-            tag="${pair#*:}"
+          resolve_ver() { # <release-tag> <product> -> version
+            gh release view "$1" --repo happier-dev/happier --json assets \
+              --jq "[.assets[].name | select(test(\"$2\"))][0]" \
+            | sed -E "s/^happier-$3-v(.+)-$4\$/\\1/"
+          }
 
-            asset=$(gh release view "$tag" --repo happier-dev/happier --json assets \
-              --jq '[.assets[].name | select(test("-linux-x64\\.tar\\.gz$"))][0]')
-            ver=$(printf '%s' "$asset" | sed -E 's/^happier-server-v(.+)-linux-x64\.tar\.gz$/\1/')
+          INCLUDE='[]'
+          for triple in $CHANNELS; do
+            ch="${triple%%:*}"
+            rest="${triple#*:}"
+            stag="${rest%%:*}"
+            utag="${rest#*:}"
+
+            sver=$(resolve_ver "$stag" '-linux-x64\.tar\.gz$' server 'linux-x64\.tar\.gz')
+            uver=$(resolve_ver "$utag" 'web-any\.tar\.gz$' ui-web 'web-any\.tar\.gz')
 
             # On schedule, skip channels whose version image already exists.
             # On push / manual dispatch, always rebuild (Dockerfile may have changed).
             if [ "$EVENT" = "schedule" ] && \
-               docker manifest inspect "$REGISTRY/$owner/happier-ui:$ver" >/dev/null 2>&1; then
-              echo "skip $ch ($ver) — already published"
+               docker manifest inspect "$REGISTRY/$owner/happier-ui:$sver" >/dev/null 2>&1; then
+              echo "skip $ch ($sver) — already published"
               continue
             fi
 
-            echo "build $ch ($ver)"
+            echo "build $ch (server=$sver ui-web=$uver)"
             INCLUDE=$(printf '%s' "$INCLUDE" | jq -c \
-              --arg ch "$ch" --arg tag "$tag" --arg ver "$ver" \
-              '. + [{channel:$ch, upstream_tag:$tag, version:$ver}]')
+              --arg ch "$ch" --arg stag "$stag" --arg sver "$sver" \
+              --arg utag "$utag" --arg uver "$uver" \
+              '. + [{channel:$ch, upstream_tag:$stag, version:$sver, ui_web_tag:$utag, ui_web_version:$uver}]')
           done
 
           echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
@@ -123,6 +131,8 @@ jobs:
           build-args: |
             SERVER_TAG=${{ matrix.upstream_tag }}
             SERVER_VERSION=${{ matrix.version }}
+            UI_WEB_TAG=${{ matrix.ui_web_tag }}
+            UI_WEB_VERSION=${{ matrix.ui_web_version }}
 
       - name: Build and push — happier-relay
         uses: docker/build-push-action@v6
@@ -137,3 +147,5 @@ jobs:
           build-args: |
             SERVER_TAG=${{ matrix.upstream_tag }}
             SERVER_VERSION=${{ matrix.version }}
+            UI_WEB_TAG=${{ matrix.ui_web_tag }}
+            UI_WEB_VERSION=${{ matrix.ui_web_version }}
