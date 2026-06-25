@@ -19,33 +19,26 @@ jobs:
       needs_build: ${{ steps.check.outputs.needs_build }}
       server_tag: ${{ steps.check.outputs.server_tag }}
       server_version: ${{ steps.check.outputs.server_version }}
-      ui_web_tag: ${{ steps.check.outputs.ui_web_tag }}
-      ui_web_version: ${{ steps.check.outputs.ui_web_version }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check for new upstream releases
+      - name: Check for new upstream release
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           SERVER_TAG=$(gh release list --repo happier-dev/happier --limit 50 \
             | awk '/^Happier Server\t/ { print $NF; exit }')
-          UI_WEB_TAG=$(gh release list --repo happier-dev/happier --limit 50 \
-            | awk '/UI Web/ { print $NF; exit }')
 
           CURRENT=$(cat .version 2>/dev/null || echo "")
-          LATEST="$SERVER_TAG $UI_WEB_TAG"
 
-          echo "server_tag=$SERVER_TAG"                   >> "$GITHUB_OUTPUT"
-          echo "server_version=${SERVER_TAG#server-v}"   >> "$GITHUB_OUTPUT"
-          echo "ui_web_tag=$UI_WEB_TAG"                   >> "$GITHUB_OUTPUT"
-          echo "ui_web_version=${UI_WEB_TAG#ui-web-v}"   >> "$GITHUB_OUTPUT"
+          echo "server_tag=$SERVER_TAG"                 >> "$GITHUB_OUTPUT"
+          echo "server_version=${SERVER_TAG#server-v}" >> "$GITHUB_OUTPUT"
 
           echo "Current: $CURRENT"
-          echo "Latest:  $LATEST"
+          echo "Latest:  $SERVER_TAG"
 
-          if [ "$LATEST" != "$CURRENT" ] || [ "${{ github.event_name }}" = "push" ]; then
+          if [ "$SERVER_TAG" != "$CURRENT" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "needs_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "needs_build=false" >> "$GITHUB_OUTPUT"
@@ -99,8 +92,6 @@ jobs:
           build-args: |
             SERVER_TAG=${{ needs.detect.outputs.server_tag }}
             SERVER_VERSION=${{ needs.detect.outputs.server_version }}
-            UI_WEB_TAG=${{ needs.detect.outputs.ui_web_tag }}
-            UI_WEB_VERSION=${{ needs.detect.outputs.ui_web_version }}
 
       - name: Build and push — headless
         uses: docker/build-push-action@v6
@@ -115,13 +106,11 @@ jobs:
           build-args: |
             SERVER_TAG=${{ needs.detect.outputs.server_tag }}
             SERVER_VERSION=${{ needs.detect.outputs.server_version }}
-            UI_WEB_TAG=${{ needs.detect.outputs.ui_web_tag }}
-            UI_WEB_VERSION=${{ needs.detect.outputs.ui_web_version }}
 
       - name: Commit updated .version
         if: github.event_name != 'push'
         run: |
-          echo "${{ needs.detect.outputs.server_tag }} ${{ needs.detect.outputs.ui_web_tag }}" > .version
+          echo "${{ needs.detect.outputs.server_tag }}" > .version
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .version
